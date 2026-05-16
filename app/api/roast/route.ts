@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 export const runtime = 'edge'
 
 const MODELS = [
+  'openrouter/free',
   'meta-llama/llama-3.3-70b-instruct:free',
-  'google/gemma-3-27b-it:free',
-  'mistralai/mistral-7b-instruct:free',
+  'deepseek/deepseek-r1:free',
 ]
 
 const SYSTEM_PROMPT = `You are "The Roaster" — a brutally honest, witty, and sharp career coach who delivers feedback like a seasoned stand-up comedian crossed with a ruthless hiring manager. Your job: roast resumes with savage humor BUT always back it up with genuinely useful fixes.
