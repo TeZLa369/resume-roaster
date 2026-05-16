@@ -2,12 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const runtime = 'edge'
 
-const MODELS = [
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'google/gemma-3-27b-it:free',
-  'mistralai/mistral-7b-instruct:free',
-]
-
 const SYSTEM_PROMPT = `You are "The Roaster" — a brutally honest, witty, and sharp career coach who delivers feedback like a seasoned stand-up comedian crossed with a ruthless hiring manager. Your job: roast resumes with savage humor BUT always back it up with genuinely useful fixes.
 
 Your tone:
@@ -48,64 +42,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'API key not configured.' }, { status: 500 })
     }
 
-    let lastError = ''
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'https://resume-roaster.vercel.app',
+        'X-Title': 'Resume Roaster',
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: `Here is the resume to roast:\n\n${resumeText.slice(0, 6000)}` }
+        ],
+        temperature: 0.85,
+        max_tokens: 1500,
+      })
+    })
 
-    // Try each model in order until one works
-    for (const model of MODELS) {
-      try {
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'https://resume-roaster.vercel.app',
-            'X-Title': 'Resume Roaster',
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              { role: 'user', content: `Here is the resume to roast:\n\n${resumeText.slice(0, 6000)}` }
-            ],
-            temperature: 0.85,
-            max_tokens: 1500,
-          })
-        })
-
-        const data = await response.json()
-
-        // If rate limited or error, try next model
-        if (!response.ok || data.error) {
-          lastError = data.error?.message || `Model ${model} failed`
-          console.warn(`Model ${model} failed:`, lastError)
-          continue
-        }
-
-        const content = data.choices?.[0]?.message?.content
-        if (!content) {
-          lastError = 'No content returned'
-          continue
-        }
-
-        // Clean and parse JSON
-        const cleaned = content.replace(/```json|```/g, '').trim()
-        const parsed = JSON.parse(cleaned)
-
-        return NextResponse.json(parsed)
-
-      } catch (modelErr) {
-        lastError = modelErr instanceof Error ? modelErr.message : 'Unknown error'
-        console.warn(`Model ${model} threw:`, lastError)
-        continue
-      }
+    if (!response.ok) {
+      const err = await response.text()
+      console.error('OpenRouter error:', err)
+      return NextResponse.json({ error: 'AI service error. Try again.' }, { status: 502 })
     }
 
-    // All models failed
-    return NextResponse.json(
-      { error: `All models are currently busy. Please try again in a moment. (${lastError})` },
-      { status: 503 }
-    )
+    const data = await response.json()
+    const content = data.choices?.[0]?.message?.content
 
+    if (!content) {
+      return NextResponse.json({ error: 'No response from AI.' }, { status: 500 })
+    }
+
+    // Clean and parse JSON
+    const cleaned = content.replace(/```json|```/g, '').trim()
+    const parsed = JSON.parse(cleaned)
+
+    return NextResponse.json(parsed)
   } catch (err) {
     console.error('Roast error:', err)
     return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
